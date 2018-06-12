@@ -80,6 +80,13 @@ cbind(predDat, predict(hyp.out, type = "response",
                        se.fit = TRUE, interval="confidence",
                        newdata = predDat))
 
+#...aside testing:
+test <- NH11[NH11$sex == "2 Female" & age_p == 33,]
+mean(test$bmi)
+# [1] 30.24467
+# confirms that the mean bmi calculated is for the whole dataset, not each
+# group
+
 ##   This tells us that a 33 year old female has a 13% probability of
 ##   having been diagnosed with hypertension, while and 63 year old female
 ##   has a 48% probability of having been diagnosed.
@@ -90,6 +97,7 @@ cbind(predDat, predict(hyp.out, type = "response",
 ##   Instead of doing all this ourselves, we can use the effects package to
 ##   compute quantities of interest for us (cf. the Zelig package).
 
+#install.packages("effects")
 library(effects)
 plot(allEffects(hyp.out))
 
@@ -106,3 +114,60 @@ plot(allEffects(hyp.out))
 ##   Note that the data is not perfectly clean and ready to be modeled. You
 ##   will need to clean up at least some of the variables before fitting
 ##   the model.
+
+# Investigating the NAs to clean
+str(NH11)
+summary(NH11[,names(NH11) %in% c("everwrk", "age_p", "r_maritl")])
+# -> NAs in everwrk
+# Fix is to make all non-Yes/Nos into "Other" grouping
+NH11$everwrk2 <- as.character(NH11$everwrk) 
+NH11$everwrk2[as.character(NH11$everwrk) == "7 Refused" | as.character(NH11$everwrk) == "8 Not ascertained" | as.character(NH11$everwrk) == "9 Don't know" | is.na(NH11$everwrk) == TRUE] <- "3 Other"
+NH11$everwrk2 <- as.factor(NH11$everwrk2)
+NH11$r_maritl2 <- droplevels(NH11$r_maritl)
+table(NH11$everwrk2) # checking everything worked
+
+# Modeling and predicting
+everwrk.out <- glm(everwrk2 ~ age_p + r_maritl2, data = NH11, family = "binomial")
+coef(summary(everwrk.out))
+
+plot(allEffects(everwrk.out))
+plot(Effect("r_maritl2", everwrk.out))
+
+pred_everwrk <- with(NH11, expand.grid(r_maritl2 = levels(r_maritl2), age_p = mean(age_p)))
+cbind(pred_everwrk, predict(everwrk.out, type = "response", newdata = pred_everwrk))
+
+# Notes:
+# Divorced and Living with partner have the lowest ever worked percentage, while 
+# Widowed and Never Married have the highest
+
+#From the solutions:
+nh11.wrk.age.mar <- subset(NH11, select = c("everwrk", "age_p", "r_maritl"))
+summary(nh11.wrk.age.mar)
+NH112 <- transform(NH11,
+                  everwrk = factor(everwrk,
+                                   levels = c("1 Yes", "2 No")),
+                  r_maritl = droplevels(r_maritl))
+# investigating changes
+summary(subset(NH112, select = c("everwrk", "age_p", "r_maritl")))
+
+mod.wk.age.mar <- glm(everwrk ~ age_p + r_maritl, data = NH112,
+                      family = "binomial")
+
+summary(mod.wk.age.mar)
+data.frame(Effect("r_maritl", mod.wk.age.mar))
+plot(Effect("r_maritl", mod.wk.age.mar))
+
+pred_everwrk <- with(NH112, expand.grid(r_maritl = r_maritl, age_p = mean(age_p)))
+cbind(pred_everwrk, predict(mod.wk.age.mar, type = "response", newdata = pred_everwrk))
+
+
+
+
+
+#Re-creating solution with my methods:
+NH11$everwrk3 <- as.character(NH11$everwrk) 
+NH11$everwrk3[as.character(NH11$everwrk) == "7 Refused" | as.character(NH11$everwrk) == "8 Not ascertained" | as.character(NH11$everwrk) == "9 Don't know" | is.na(NH11$everwrk) == TRUE] <- NA
+NH11$everwrk3 <- as.factor(NH11$everwrk3)
+table(NH11$everwrk3)
+everwrk.out2 <- glm(everwrk3 ~ age_p + r_maritl2, data = NH11, family = "binomial")
+plot(Effect("r_maritl3", everwrk.out2))
